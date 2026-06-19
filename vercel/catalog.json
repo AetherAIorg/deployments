@@ -1,0 +1,6 @@
+{
+  "projectSettings": {
+    "rootDirectory": "app/registry_governance/frontend",
+    "framework": "nextjs"
+  }
+}

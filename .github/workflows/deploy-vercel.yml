@@ -1,0 +1,50 @@
+name: Deploy Vercel
+
+on:
+  workflow_call:
+
+jobs:
+  vercel:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout with submodule
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.SUBMODULE_PAT }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+
+      - name: Deploy MetricGraph frontend
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID_APP }}
+        run: |
+          if [[ ! -d app/metricgraph/frontend ]]; then
+            echo "skip metricgraph frontend (submodule missing)"
+            exit 0
+          fi
+          vercel deploy app/metricgraph/frontend --prod --token "$VERCEL_TOKEN" --yes \
+            ${VERCEL_ORG_ID:+--scope "$VERCEL_ORG_ID"} \
+            ${VERCEL_PROJECT_ID:+--project "$VERCEL_PROJECT_ID"}
+
+      - name: Deploy Catalog frontend
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID_CATALOG }}
+        run: |
+          if [[ ! -d app/registry_governance/frontend ]]; then
+            echo "skip catalog frontend (submodule missing)"
+            exit 0
+          fi
+          vercel deploy app/registry_governance/frontend --prod --token "$VERCEL_TOKEN" --yes \
+            ${VERCEL_ORG_ID:+--scope "$VERCEL_ORG_ID"} \
+            ${VERCEL_PROJECT_ID:+--project "$VERCEL_PROJECT_ID"}

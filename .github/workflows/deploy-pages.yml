@@ -1,0 +1,69 @@
+name: Deploy GitHub Pages
+
+on:
+  workflow_call:
+    inputs:
+      pages_only:
+        description: Deploy from external pages repo (skip submodule)
+        required: false
+        type: boolean
+        default: false
+      external_repo:
+        description: owner/repo for standalone pages repo
+        required: false
+        type: string
+      external_ref:
+        description: Git SHA to deploy from external pages repo
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  pages:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout external pages repo
+        if: inputs.pages_only && inputs.external_repo != ''
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.external_repo }}
+          ref: ${{ inputs.external_ref }}
+          token: ${{ secrets.SUBMODULE_PAT }}
+          path: pages-site
+
+      - name: Checkout deployments with submodule
+        if: ${{ !(inputs.pages_only && inputs.external_repo != '') }}
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.SUBMODULE_PAT }}
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact (external)
+        if: inputs.pages_only && inputs.external_repo != ''
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: pages-site
+
+      - name: Upload artifact (submodule)
+        if: ${{ !(inputs.pages_only && inputs.external_repo != '') }}
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: app/margin_github_pages
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

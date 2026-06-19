@@ -1,0 +1,3 @@
+# GitHub Pages artifact config (used by deploy-pages workflow)
+artifact_path: app/margin_github_pages
+# Enable in deployments repo: Settings → Pages → Build and deployment → GitHub Actions

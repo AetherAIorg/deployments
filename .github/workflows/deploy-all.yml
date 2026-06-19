@@ -1,0 +1,121 @@
+name: Deploy All
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_ref:
+        description: Git SHA of aether_org to deploy (optional)
+        required: false
+        type: string
+  repository_dispatch:
+    types: [app-updated, pages-updated]
+  push:
+    branches: [main]
+    paths:
+      - render.yaml
+      - .github/**
+      - .gitmodules
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  resolve-ref:
+    runs-on: ubuntu-latest
+    outputs:
+      app_ref: ${{ steps.ref.outputs.app_ref }}
+      pages_only: ${{ steps.ref.outputs.pages_only }}
+      skip_bump: ${{ steps.ref.outputs.skip_bump }}
+    steps:
+      - name: Resolve deploy ref
+        id: ref
+        env:
+          INPUT_REF: ${{ inputs.app_ref }}
+          DISPATCH_REF: ${{ github.event.client_payload.ref }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_ACTION: ${{ github.event.action }}
+          PAGES_ONLY: ${{ github.event.client_payload.pages_only }}
+        run: |
+          pages_only="false"
+          skip_bump="false"
+          if [[ "$EVENT_NAME" == "repository_dispatch" && "$EVENT_ACTION" == "pages-updated" ]]; then
+            pages_only="true"
+          fi
+          if [[ "$PAGES_ONLY" == "true" ]]; then
+            pages_only="true"
+          fi
+          if [[ "$EVENT_NAME" == "push" ]]; then
+            skip_bump="true"
+          fi
+
+          app_ref=""
+          if [[ -n "$INPUT_REF" ]]; then
+            app_ref="$INPUT_REF"
+          elif [[ -n "$DISPATCH_REF" ]]; then
+            app_ref="$DISPATCH_REF"
+          elif [[ "$skip_bump" != "true" ]]; then
+            app_ref="${GITHUB_SHA}"
+          fi
+
+          echo "app_ref=$app_ref" >> "$GITHUB_OUTPUT"
+          echo "pages_only=$pages_only" >> "$GITHUB_OUTPUT"
+          echo "skip_bump=$skip_bump" >> "$GITHUB_OUTPUT"
+          echo "Deploy ref: ${app_ref:-<unchanged>} (pages_only=$pages_only skip_bump=$skip_bump)"
+
+  bump-submodule:
+    needs: resolve-ref
+    if: needs.resolve-ref.outputs.pages_only != 'true' && needs.resolve-ref.outputs.skip_bump != 'true'
+    uses: ./.github/workflows/bump-submodule.yml
+    secrets: inherit
+    with:
+      app_ref: ${{ needs.resolve-ref.outputs.app_ref }}
+      skip: false
+
+  deploy-render:
+    needs: [resolve-ref, bump-submodule]
+    if: |
+      always() &&
+      needs.resolve-ref.outputs.pages_only != 'true' &&
+      (needs.bump-submodule.result == 'success' || needs.bump-submodule.result == 'skipped')
+    uses: ./.github/workflows/deploy-render.yml
+    secrets: inherit
+
+  deploy-vercel:
+    needs: [resolve-ref, bump-submodule]
+    if: |
+      always() &&
+      needs.resolve-ref.outputs.pages_only != 'true' &&
+      (needs.bump-submodule.result == 'success' || needs.bump-submodule.result == 'skipped')
+    uses: ./.github/workflows/deploy-vercel.yml
+    secrets: inherit
+
+  deploy-pages:
+    needs: [resolve-ref, bump-submodule]
+    if: |
+      always() &&
+      (needs.bump-submodule.result == 'success' || needs.bump-submodule.result == 'skipped' || needs.resolve-ref.outputs.pages_only == 'true')
+    uses: ./.github/workflows/deploy-pages.yml
+    secrets: inherit
+    with:
+      pages_only: ${{ needs.resolve-ref.outputs.pages_only == 'true' }}
+      external_repo: ${{ github.event.client_payload.repo }}
+      external_ref: ${{ github.event.client_payload.ref }}
+
+  verify:
+    needs: [resolve-ref, deploy-render, deploy-vercel]
+    if: needs.resolve-ref.outputs.pages_only != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Health checks
+        env:
+          API_URL: ${{ vars.API_URL }}
+          HUB_URL: ${{ vars.HUB_URL }}
+          CATALOG_API_URL: ${{ vars.CATALOG_API_URL }}
+          MARGIN_APP_URL: ${{ vars.MARGIN_APP_URL }}
+          CATALOG_APP_URL: ${{ vars.CATALOG_APP_URL }}
+        run: bash scripts/verify-health.sh

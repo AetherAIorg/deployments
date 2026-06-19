@@ -1,0 +1,6 @@
+{
+  "projectSettings": {
+    "rootDirectory": "app/metricgraph/frontend",
+    "framework": "nextjs"
+  }
+}

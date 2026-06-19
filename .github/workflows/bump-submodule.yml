@@ -1,0 +1,57 @@
+name: Bump app submodule
+
+on:
+  workflow_call:
+    inputs:
+      app_ref:
+        description: Git SHA of aether_org to pin
+        required: true
+        type: string
+      skip:
+        description: Skip bump (pages-only from separate repo)
+        required: false
+        type: boolean
+        default: false
+    outputs:
+      app_ref:
+        description: Resolved submodule SHA
+        value: ${{ jobs.bump.outputs.app_ref }}
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    outputs:
+      app_ref: ${{ steps.final.outputs.app_ref }}
+    steps:
+      - name: Checkout deployments
+        if: ${{ !inputs.skip }}
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.SUBMODULE_PAT }}
+          submodules: false
+
+      - name: Bump submodule
+        if: ${{ !inputs.skip }}
+        env:
+          APP_REF: ${{ inputs.app_ref }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git submodule update --init --recursive || true
+          if [[ ! -d app ]]; then
+            echo "app/ submodule missing — run: git submodule add <aether_org_url> app"
+            exit 1
+          fi
+          git -C app fetch origin
+          git -C app checkout "$APP_REF"
+          git add app
+          if git diff --cached --quiet; then
+            echo "submodule already at $APP_REF"
+          else
+            git commit -m "chore: bump app submodule to $APP_REF"
+            git push
+          fi
+
+      - name: Finalize ref
+        id: final
+        run: echo "app_ref=${{ inputs.app_ref }}" >> "$GITHUB_OUTPUT"

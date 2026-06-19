@@ -1,0 +1,32 @@
+name: Deploy Render
+
+on:
+  workflow_call:
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render deploy hooks
+        env:
+          RENDER_DEPLOY_HOOK_API: ${{ secrets.RENDER_DEPLOY_HOOK_API }}
+          RENDER_DEPLOY_HOOK_WORKER: ${{ secrets.RENDER_DEPLOY_HOOK_WORKER }}
+          RENDER_DEPLOY_HOOK_HUB: ${{ secrets.RENDER_DEPLOY_HOOK_HUB }}
+          RENDER_DEPLOY_HOOK_INGEST: ${{ secrets.RENDER_DEPLOY_HOOK_INGEST }}
+          RENDER_DEPLOY_HOOK_CATALOG: ${{ secrets.RENDER_DEPLOY_HOOK_CATALOG }}
+        run: |
+          trigger() {
+            local name="$1"
+            local url="$2"
+            if [[ -z "$url" ]]; then
+              echo "skip $name (hook not configured)"
+              return 0
+            fi
+            echo "deploy $name ..."
+            curl -fsS -X POST "$url" -o /dev/null
+          }
+          trigger margin-api "$RENDER_DEPLOY_HOOK_API"
+          trigger margin-worker "$RENDER_DEPLOY_HOOK_WORKER"
+          trigger margin-hub "$RENDER_DEPLOY_HOOK_HUB"
+          trigger margin-ingest "$RENDER_DEPLOY_HOOK_INGEST"
+          trigger catalog-api "$RENDER_DEPLOY_HOOK_CATALOG"
