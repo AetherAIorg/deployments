@@ -32,9 +32,9 @@ aether_org push ──► trigger-deploy.yml ──► repository_dispatch ─�
 Update [`.gitmodules`](.gitmodules) with your `aether_org` remote, then:
 
 ```bash
-git clone git@github.com:YOUR_ORG/deployments.git
+git clone https://github.com/AetherAIorg/deployments.git
 cd deployments
-git submodule add git@github.com:YOUR_ORG/aether_org.git app   # first time only
+git submodule add https://github.com/AetherAIorg/aether_org.git app   # first time only
 ./scripts/init.sh
 ```
 
@@ -93,7 +93,7 @@ Same `DEPLOYMENTS_DISPATCH_TOKEN` and `DEPLOYMENTS_REPO` variable. Pushes dispat
 
 | Variable | Example |
 |----------|---------|
-| `DEPLOYMENTS_REPO` | `YOUR_ORG/deployments` |
+| `DEPLOYMENTS_REPO` | `AetherAIorg/deployments` |
 
 **In `deployments` repo variables (health checks):**
 

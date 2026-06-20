@@ -15,7 +15,7 @@ git submodule update --init --recursive
 if [[ ! -d app/.git ]]; then
   echo ""
   echo "Submodule empty. Update .gitmodules with your aether_org remote, then:"
-  echo "  git submodule add git@github.com:YOUR_ORG/aether_org.git app"
+  echo "  git submodule add https://github.com/AetherAIorg/aether_org.git app"
   exit 1
 fi
 
