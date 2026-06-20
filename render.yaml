@@ -186,14 +186,14 @@ services:
       - key: CORS_ORIGINS
         sync: false
 
+  - type: keyvalue
+    name: margin-redis
+    plan: free
+    ipAllowList: []
+
 databases:
   - name: margin-postgres
     plan: free
 
   - name: catalog-postgres
     plan: free
-
-  - name: margin-redis
-    type: keyvalue
-    plan: free
-    ipAllowList: []
