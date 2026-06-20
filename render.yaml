@@ -1,10 +1,11 @@
-# Render blueprint — connect this repo in Render Dashboard → New Blueprint
-# Docker paths are relative to deployments repo root (app/ submodule).
+# MVP — free-tier backend only (API + Postgres + Redis).
+# Full stack: see render.full.yaml
 
 services:
   - type: web
     name: margin-api
     runtime: docker
+    plan: free
     dockerfilePath: ./app/metricgraph/backend/Dockerfile
     dockerContext: ./app/metricgraph/backend
     dockerCommand: uvicorn app.main:app --host 0.0.0.0 --port 8000
@@ -20,55 +21,10 @@ services:
           name: margin-redis
           type: keyvalue
           property: connectionString
-      - key: NEO4J_URI
-        sync: false
-      - key: NEO4J_USER
-        sync: false
-      - key: NEO4J_PASSWORD
-        sync: false
+      - key: CORS_ORIGINS
+        value: https://margin-app-karman103s-projects.vercel.app,http://localhost:3000
       - key: AUTH_SECRET
         sync: false
-      - key: CORS_ORIGINS
-        sync: false
-      - key: S3_ENDPOINT
-        sync: false
-      - key: S3_ACCESS_KEY
-        sync: false
-      - key: S3_SECRET_KEY
-        sync: false
-      - key: S3_BUCKET
-        sync: false
-      - key: S3_REGION
-        sync: false
-      - key: S3_USE_SSL
-        sync: false
-      - key: OPENROUTER_API_KEY
-        sync: false
-      - key: INTEGRATION_WEBHOOK_URL
-        sync: false
-      - key: INTEGRATION_WEBHOOK_SECRET
-        sync: false
-      - key: GOVERNANCE_WEBHOOK_URL
-        sync: false
-      - key: GOVERNANCE_WEBHOOK_SECRET
-        sync: false
-
-  - type: worker
-    name: margin-worker
-    runtime: docker
-    dockerfilePath: ./app/metricgraph/backend/Dockerfile
-    dockerContext: ./app/metricgraph/backend
-    dockerCommand: python -m app.worker
-    envVars:
-      - key: DATABASE_URL
-        fromDatabase:
-          name: margin-postgres
-          property: connectionString
-      - key: REDIS_URL
-        fromService:
-          name: margin-redis
-          type: keyvalue
-          property: connectionString
       - key: NEO4J_URI
         sync: false
       - key: NEO4J_USER
@@ -88,102 +44,6 @@ services:
       - key: S3_USE_SSL
         sync: false
       - key: OPENROUTER_API_KEY
-        sync: false
-      - key: INTEGRATION_WEBHOOK_URL
-        sync: false
-      - key: INTEGRATION_WEBHOOK_SECRET
-        sync: false
-      - key: GOVERNANCE_WEBHOOK_URL
-        sync: false
-      - key: GOVERNANCE_WEBHOOK_SECRET
-        sync: false
-
-  - type: web
-    name: margin-hub
-    runtime: docker
-    dockerfilePath: ./app/integration_hub/Dockerfile
-    dockerContext: ./app/integration_hub
-    healthCheckPath: /health
-    disk:
-      name: hub-state
-      mountPath: /data
-      sizeGB: 1
-    envVars:
-      - key: STATE_DB
-        value: /data/.hub_state.db
-      - key: METRICGRAPH_BASE_URL
-        fromService:
-          name: margin-api
-          type: web
-          property: hostport
-      - key: MARGIN_API_KEY
-        sync: false
-      - key: HUB_WEBHOOK_SECRET
-        sync: false
-      - key: OPENROUTER_API_KEY
-        sync: false
-      - key: SLACK_BOT_TOKEN
-        sync: false
-      - key: SLACK_SIGNING_SECRET
-        sync: false
-      - key: LINEAR_API_KEY
-        sync: false
-      - key: LINEAR_WEBHOOK_SECRET
-        sync: false
-      - key: LINEAR_TEAM_ID
-        sync: false
-
-  - type: worker
-    name: margin-ingest
-    runtime: docker
-    dockerfilePath: ./app/ingest_engine/Dockerfile
-    dockerContext: ./app/ingest_engine
-    disk:
-      name: ingest-data
-      mountPath: /data
-      sizeGB: 1
-    envVars:
-      - key: METRICGRAPH_BASE_URL
-        fromService:
-          name: margin-api
-          type: web
-          property: hostport
-      - key: INGEST_API_KEY
-        sync: false
-      - key: HUB_WEBHOOK_URL
-        sync: false
-      - key: HUB_WEBHOOK_SECRET
-        sync: false
-      - key: INGEST_POLL_INTERVAL
-        value: "10"
-
-  - type: web
-    name: catalog-api
-    runtime: docker
-    dockerfilePath: ./app/registry_governance/backend/Dockerfile
-    dockerContext: ./app/registry_governance/backend
-    dockerCommand: uvicorn app.main:app --host 0.0.0.0 --port 8090
-    healthCheckPath: /api/health
-    preDeployCommand: alembic upgrade head
-    envVars:
-      - key: DATABASE_URL
-        fromDatabase:
-          name: catalog-postgres
-          property: connectionString
-      - key: METRICGRAPH_BASE_URL
-        fromService:
-          name: margin-api
-          type: web
-          property: hostport
-      - key: REGISTRY_BASE_URL
-        sync: false
-      - key: METRICGRAPH_MATERIALIZE_URL
-        sync: false
-      - key: METRICGRAPH_API_KEY
-        sync: false
-      - key: WEBHOOK_SECRET
-        sync: false
-      - key: CORS_ORIGINS
         sync: false
 
   - type: keyvalue
@@ -193,7 +53,4 @@ services:
 
 databases:
   - name: margin-postgres
-    plan: free
-
-  - name: catalog-postgres
     plan: free
