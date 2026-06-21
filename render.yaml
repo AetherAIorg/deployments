@@ -1,3 +1,4 @@
+# DEPRECATED — use do/docker-compose.prod.yml on DigitalOcean instead.
 # MVP — free-tier backend only (API + Postgres + Redis).
 # Full stack: see render.full.yaml
 

@@ -1,0 +1,22 @@
+name: Deploy DigitalOcean
+
+on:
+  workflow_call:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_SSH_USER }}
+          key: ${{ secrets.DO_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            INSTALL_DIR="${INSTALL_DIR:-/root/deployments}"
+            cd "$INSTALL_DIR"
+            git pull origin main
+            git submodule update --init --recursive
+            docker compose --env-file do/.env -f do/docker-compose.prod.yml up -d --build

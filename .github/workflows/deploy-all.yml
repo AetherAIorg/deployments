@@ -12,7 +12,7 @@ on:
   push:
     branches: [main]
     paths:
-      - render.yaml
+      - do/**
       - .github/**
       - .gitmodules
 
@@ -73,13 +73,13 @@ jobs:
       app_ref: ${{ needs.resolve-ref.outputs.app_ref }}
       skip: false
 
-  deploy-render:
+  deploy-do:
     needs: [resolve-ref, bump-submodule]
     if: |
       always() &&
       needs.resolve-ref.outputs.pages_only != 'true' &&
       (needs.bump-submodule.result == 'success' || needs.bump-submodule.result == 'skipped')
-    uses: ./.github/workflows/deploy-render.yml
+    uses: ./.github/workflows/deploy-do.yml
     secrets: inherit
 
   deploy-vercel:
@@ -104,7 +104,7 @@ jobs:
       external_ref: ${{ github.event.client_payload.ref }}
 
   verify:
-    needs: [resolve-ref, deploy-render, deploy-vercel]
+    needs: [resolve-ref, deploy-do, deploy-vercel]
     if: needs.resolve-ref.outputs.pages_only != 'true'
     runs-on: ubuntu-latest
     steps:

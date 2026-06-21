@@ -1,83 +1,88 @@
 # Margin Deployments
 
-Production deploy orchestration for the Margin stack. This repo owns platform config (Render, Vercel, GitHub Pages) and tracks application source via the `app/` git submodule (`aether_org`).
+Production deploy orchestration for the Margin stack. This repo owns platform config (DigitalOcean, Vercel, GitHub Pages) and tracks application source via the `app/` git submodule (`aether_org`).
 
 ## Architecture
 
 ```
 aether_org push ──► trigger-deploy.yml ──► repository_dispatch ──► deploy-all.yml
                                                                       ├── bump app/
-                                                                      ├── Render hooks
+                                                                      ├── DO SSH deploy
                                                                       ├── Vercel CLI
                                                                       └── GitHub Pages
 ```
 
 | Component | Platform | Config |
 |-----------|----------|--------|
-| MetricGraph API + worker | Render | `render.yaml` → `margin-api`, `margin-worker` |
-| Integration Hub | Render | `margin-hub` |
-| Ingest engine | Render | `margin-ingest` |
-| Catalog API | Render | `catalog-api` |
-| Postgres + Redis | Render | `margin-postgres`, `catalog-postgres`, `margin-redis` |
+| MetricGraph API + worker | DigitalOcean Droplet | [`do/docker-compose.prod.yml`](do/docker-compose.prod.yml) |
+| Postgres + Redis | Same droplet (Docker) | pgvector + Redis in compose |
 | MetricGraph UI | Vercel | `app/metricgraph/frontend` |
 | Catalog UI | Vercel | `app/registry_governance/frontend` |
 | Marketing site | GitHub Pages | `app/margin_github_pages` |
-| Neo4j KG | Neo4j Aura | manual env on Render |
-| Object storage | S3 / R2 | manual env on Render |
+| Neo4j KG | Neo4j Aura | `do/.env` |
+| Object storage | Cloudflare R2 / S3 | `do/.env` |
+
+Hub, ingest, and catalog-api are deferred for MVP. Full Render stack preserved in [`render.full.yaml`](render.full.yaml) (deprecated).
 
 ## Quick start
 
 ### 1. Clone and init submodule
 
-Update [`.gitmodules`](.gitmodules) with your `aether_org` remote, then:
-
 ```bash
 git clone https://github.com/AetherAIorg/deployments.git
 cd deployments
-git submodule add https://github.com/AetherAIorg/aether_org.git app   # first time only
 ./scripts/init.sh
 ```
 
-### 2. Connect Render
+### 2. DigitalOcean Droplet (MVP backend)
 
-1. [Render Dashboard](https://dashboard.render.com) → **New Blueprint**
-2. Connect this repo
-3. Sync [`render.yaml`](render.yaml)
-4. Set `sync: false` secrets from [`.env.example`](.env.example) (Neo4j, S3, auth, webhooks, API keys)
+1. Create an **Ubuntu 24.04** droplet (**1 GB RAM / ~$6/mo** recommended).
+2. Add your SSH key.
+3. Point `api.yourdomain.com` A-record to the droplet IP.
+4. On the droplet:
 
-After first deploy, set webhook URLs using each service's Render external URL:
+```bash
+curl -fsSL https://raw.githubusercontent.com/AetherAIorg/deployments/main/scripts/setup-droplet.sh | bash
+```
 
-- `INTEGRATION_WEBHOOK_URL` → `https://<margin-hub>/webhooks/metricgraph`
-- `GOVERNANCE_WEBHOOK_URL` → `https://<catalog-api>/webhooks/metricgraph`
-- `HUB_WEBHOOK_URL` (ingest) → `https://<margin-hub>/webhooks/ingest`
+5. Edit `do/.env` on the droplet:
 
-Create **Deploy Hooks** for each Render service and add URLs to GitHub secrets (`RENDER_DEPLOY_HOOK_*`).
+   - `API_DOMAIN` — your API subdomain
+   - `AUTH_SECRET` — same value as Vercel (`openssl rand -base64 32`)
+   - `CORS_ORIGINS` — include your Vercel frontend URL
+   - `NEO4J_*`, `S3_*` — optional for MVP; required for KG and file uploads
+
+6. Redeploy after editing env:
+
+```bash
+cd /root/deployments
+docker compose --env-file do/.env -f do/docker-compose.prod.yml up -d --build
+```
+
+7. Verify: `curl -fsS https://api.yourdomain.com/api/health`
 
 ### 3. Connect Vercel
 
-Create two projects with root directories (in this repo):
+Deploy `app/metricgraph/frontend` (or link `aether_org` directly). Set:
 
-- `app/metricgraph/frontend`
-- `app/registry_governance/frontend`
+- `NEXT_PUBLIC_API_URL=https://api.yourdomain.com`
+- `AUTH_SECRET` — match backend
 
-Set env vars from `.env.example`. Add `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID_*` to GitHub secrets.
+Add `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID_*` to GitHub secrets.
 
-### 4. GitHub Pages
-
-In this repo: **Settings → Pages → Build and deployment → GitHub Actions**.
-
-### 5. Cross-repo CI secrets
+### 4. GitHub Actions auto-deploy
 
 **In `deployments` repo secrets:**
 
 | Secret | Purpose |
 |--------|---------|
 | `SUBMODULE_PAT` | Read/write submodule bump |
+| `DO_HOST` | Droplet IP or hostname |
+| `DO_SSH_USER` | SSH user (e.g. `root`) |
+| `DO_SSH_KEY` | Private key for Actions |
 | `VERCEL_TOKEN` | Vercel deploy |
 | `VERCEL_ORG_ID` | Vercel scope |
 | `VERCEL_PROJECT_ID_APP` | MetricGraph frontend |
-| `VERCEL_PROJECT_ID_CATALOG` | Catalog frontend |
-| `RENDER_DEPLOY_HOOK_*` | Trigger Render rebuilds |
 
 **In `aether_org` repo secrets:**
 
@@ -85,59 +90,35 @@ In this repo: **Settings → Pages → Build and deployment → GitHub Actions**
 |--------|---------|
 | `DEPLOYMENTS_DISPATCH_TOKEN` | PAT with `actions:write` on deployments repo |
 
-**In `margin_github_pages` repo secrets (separate remote):**
-
-Same `DEPLOYMENTS_DISPATCH_TOKEN` and `DEPLOYMENTS_REPO` variable. Pushes dispatch `pages-updated` (Pages-only deploy).
-
-**In `aether_org` repo variables:**
-
-| Variable | Example |
-|----------|---------|
-| `DEPLOYMENTS_REPO` | `AetherAIorg/deployments` |
-
 **In `deployments` repo variables (health checks):**
 
-`API_URL`, `HUB_URL`, `CATALOG_API_URL`, `MARGIN_APP_URL`, `CATALOG_APP_URL`
+`API_URL`, `MARGIN_APP_URL` (hub/catalog optional for MVP)
 
-### 6. First deploy
+### 5. First deploy
 
-```bash
-# Manual trigger from GitHub Actions → Deploy All
-# Or merge to aether_org main (auto-triggers via trigger-deploy.yml)
-```
-
-Mint API keys against live API:
-
-```bash
-# After margin-api is up
-curl -X POST ...  # or use CLI from app repo
-```
-
-Set `MARGIN_API_KEY`, `INGEST_API_KEY`, `METRICGRAPH_API_KEY` in Render.
+Merge to `aether_org` `main` → auto-triggers deployments pipeline, or run **Deploy All** manually in GitHub Actions.
 
 ## Day-2 flow
 
-Merge to `aether_org` `main` → `trigger-deploy.yml` → deployments bumps `app/` submodule → full stack redeploy.
+Merge to `aether_org` `main` → deployments bumps `app/` submodule → SSH redeploy on droplet + Vercel.
 
-Push to `margin_github_pages` `main` → `pages-updated` dispatch → Pages-only deploy (checks out that repo directly).
-
-Infra-only changes: push to `deployments` `main` (`render.yaml`, workflows) → redeploy without submodule bump.
+Infra changes: push to `deployments` `main` (`do/`, workflows) → redeploy without submodule bump.
 
 ## Scripts
 
 | Script | Purpose |
 |--------|---------|
 | [`scripts/init.sh`](scripts/init.sh) | Init submodule |
-| [`scripts/deploy-render.sh`](scripts/deploy-render.sh) | POST Render deploy hooks |
+| [`scripts/setup-droplet.sh`](scripts/setup-droplet.sh) | First-time droplet bootstrap |
+| [`scripts/deploy-do.sh`](scripts/deploy-do.sh) | Redeploy on droplet |
 | [`scripts/deploy-vercel.sh`](scripts/deploy-vercel.sh) | Vercel CLI prod deploy |
-| [`scripts/run-migrations.sh`](scripts/run-migrations.sh) | Optional Render one-off migrations |
 | [`scripts/verify-health.sh`](scripts/verify-health.sh) | Curl health endpoints |
 | [`scripts/verify-s3.sh`](scripts/verify-s3.sh) | Test S3/R2 bucket access |
-
-## PyPI
-
-The `margin` SDK publishes from `aether_org` on `margin-v*` tags — not from this repo.
 
 ## Local development
 
 Use Docker in `aether_org` (`docker compose up`). This repo is production-only.
+
+## Backups
+
+Postgres data lives in the `pgdata` Docker volume. Schedule periodic `pg_dump` on the droplet for production use.

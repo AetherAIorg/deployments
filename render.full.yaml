@@ -1,3 +1,4 @@
+# DEPRECATED — use do/docker-compose.prod.yml on DigitalOcean instead.
 # Full production stack — use when ready to scale beyond MVP.
 # Replace render.yaml with this file (or merge services back in).
 
